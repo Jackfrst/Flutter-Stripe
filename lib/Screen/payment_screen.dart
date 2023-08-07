@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe_payment/utils/model/stripe_model.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_stripe/flutter_stripe.dart';
 
@@ -16,6 +17,7 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   Map<String, dynamic>? paymentIntentData;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -23,25 +25,60 @@ class _PaymentScreenState extends State<PaymentScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text("Stripe Payment"),
       ),
-      body: Center(
-        child: InkWell(
-          onTap: () async {
-            // final paymentMethod = await Stripe.instance.createPaymentMethod(
-            //     params: const PaymentMethodParams.card(
-            //         paymentMethodData: PaymentMethodData()));
-            await makePayment();
-          },
-          child: Container(
-            height: 50,
-            width: 200,
-            color: Colors.green,
-            child: const Center(
-              child: Text(
-                'Pay',
-                style: TextStyle(color: Colors.white, fontSize: 20),
+      body: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            InkWell(
+              onTap: () async {
+                await makePayment();
+              },
+              child: Container(
+                height: 50,
+                color: Colors.green,
+                child: const Center(
+                  child: Text(
+                    'Pay',
+                    style: TextStyle(color: Colors.white, fontSize: 20),
+                  ),
+                ),
               ),
             ),
-          ),
+            SizedBox(height: 20,),
+            InkWell(
+              onTap: () async {
+
+              },
+              child: Container(
+                height: 50,
+                color: Colors.green,
+                child: const Center(
+                  child: Text(
+                    'Add a Payment Method',
+                    style: TextStyle(color: Colors.white, fontSize: 20),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: 20,),
+            InkWell(
+              onTap: () async {
+
+              },
+              child: Container(
+                height: 50,
+                color: Colors.green,
+                child: const Center(
+                  child: Text(
+                    'Pay Now',
+                    style: TextStyle(color: Colors.white, fontSize: 20),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -49,25 +86,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Future<void> makePayment() async {
     try {
-      paymentIntentData =
-      await createPaymentIntent('20', 'USD'); //json.decode(response.body);
-      // print('Response body==>${response.body.toString()}');
+      paymentIntentData = await createPaymentIntent('20', 'USD');
+
       await Stripe.instance
           .initPaymentSheet(
-          paymentSheetParameters: SetupPaymentSheetParameters(
-              setupIntentClientSecret: 'Your Secret Key',
-              paymentIntentClientSecret:
-              paymentIntentData!['client_secret'],
+            paymentSheetParameters: SetupPaymentSheetParameters(
+              setupIntentClientSecret: '$stripePrivateKey',
+              paymentIntentClientSecret: paymentIntentData!['client_secret'],
               //applePay: PaymentSheetApplePay.,
               //googlePay: true,
-              //testEnv: true,
+              customerEphemeralKeySecret: paymentIntentData!['ephemeralKey'],
               customFlow: true,
-              style: ThemeMode.dark,
-              // merchantCountryCode: 'US',
-              merchantDisplayName: 'Kashif'))
+              style: ThemeMode.light,
+              merchantDisplayName: 'ARML',
+            ),
+          )
           .then((value) {});
 
-      ///now finally display payment sheeet
+      ///now finally display payment sheet
       displayPaymentSheet();
     } catch (e, s) {
       print('Payment exception:$e$s');
@@ -76,20 +112,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   displayPaymentSheet() async {
     try {
-      await Stripe.instance
-          .presentPaymentSheet(
-        //       parameters: PresentPaymentSheetParameters(
-        // clientSecret: paymentIntentData!['client_secret'],
-        // confirmPayment: true,
-        // )
-      )
-          .then((newValue) {
+      await Stripe.instance.presentPaymentSheet().then((newValue) async {
+        await Stripe.instance.confirmPaymentSheetPayment();
+
         print('payment intent' + paymentIntentData!['id'].toString());
         print(
             'payment intent' + paymentIntentData!['client_secret'].toString());
         print('payment intent' + paymentIntentData!['amount'].toString());
         print('payment intent' + paymentIntentData.toString());
-        //orderPlaceApi(paymentIntentData!['id'].toString());
+
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text("paid successfully")));
 
@@ -102,33 +133,33 @@ class _PaymentScreenState extends State<PaymentScreen> {
       showDialog(
           context: context,
           builder: (_) => const AlertDialog(
-            content: Text("Cancelled "),
-          ));
+                content: Text("Cancelled "),
+              ));
     } catch (e) {
       print('$e');
     }
   }
 
-  //  Future<Map<String, dynamic>>
   createPaymentIntent(String amount, String currency) async {
     try {
-      Map<String, dynamic> body = {
-        'amount': calculateAmount('20'),
-        'currency': currency,
-        'payment_method_types[]': 'card',
-      };
-      print(body);
+      StripeModel body = StripeModel(
+        amount: calculateAmount('20'),
+        currency: currency,
+        paymentMethodTypes: 'card',
+      );
+
+      print(body.toJson());
       var response = await http.post(
           Uri.parse('https://api.stripe.com/v1/payment_intents'),
-          body: body,
+          body: body.toJson(),
           headers: {
             'Authorization': 'Bearer $stripePrivateKey',
             'Content-Type': 'application/x-www-form-urlencoded'
           });
-      print('Create Intent reponse ===> ${response.body.toString()}');
+      print('Create Intent reponse -------${response.body.toString()}------');
       return jsonDecode(response.body);
-    } catch (err) {
-      print('err charging user: ${err.toString()}');
+    } catch (error) {
+      print('error charging user: ${error.toString()}');
     }
   }
 
@@ -136,4 +167,5 @@ class _PaymentScreenState extends State<PaymentScreen> {
     final a = (int.parse(amount)) * 100;
     return a.toString();
   }
+
 }
